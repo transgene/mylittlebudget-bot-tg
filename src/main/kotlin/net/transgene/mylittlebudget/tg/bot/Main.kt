@@ -4,10 +4,12 @@ import com.github.kotlintelegrambot.bot
 import com.github.kotlintelegrambot.dispatch
 import com.github.kotlintelegrambot.dispatcher.callbackQuery
 import com.github.kotlintelegrambot.dispatcher.command
+import com.github.kotlintelegrambot.dispatcher.message
 import com.github.kotlintelegrambot.entities.InlineKeyboardButton
 import com.github.kotlintelegrambot.entities.InlineKeyboardMarkup
 import com.github.kotlintelegrambot.entities.Message
 import com.github.kotlintelegrambot.entities.Update
+import com.github.kotlintelegrambot.extensions.filters.Filter
 import com.github.kotlintelegrambot.network.Response
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.extensions.java6.auth.oauth2.AuthorizationCodeInstalledApp
@@ -20,56 +22,90 @@ import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.client.util.store.FileDataStoreFactory
 import com.google.api.services.sheets.v4.Sheets
 import com.google.api.services.sheets.v4.SheetsScopes
+import com.google.api.services.sheets.v4.model.BatchUpdateSpreadsheetRequest
+import com.google.api.services.sheets.v4.model.Request
+import com.google.api.services.sheets.v4.model.UpdateCellsRequest
 import java.io.File
 import java.io.InputStreamReader
+import java.util.concurrent.atomic.AtomicInteger
 
 fun main(args: Array<String>) {
-    //TODO 1) move column id to a separate val; 2) change pairs to int ranges
-    val expenseCategoriesMap: Map<String, Pair<String, String>> =
+    val categoryColumn = "A"
+    val expenseCategoriesMap: Map<Int, IntRange> =
         mapOf(
-            Pair("A2", Pair("A4", "A7")),
-            Pair("A8", Pair("A10", "A11")),
-            Pair("A12", Pair("A13", "A20")),
-            Pair("A21", Pair("A23", "A24")),
-            Pair("A25", Pair("A26", "A31")),
-            Pair("A34", Pair("A36", "A38")),
-            Pair("A39", Pair("A41", "A42")),
-            Pair("A43", Pair("A45", "A46")),
-            Pair("A52", Pair("A54", "A59"))
+            Pair(2, IntRange(4, 7)),
+            Pair(8, IntRange(10, 11)),
+            Pair(12, IntRange(13, 20)),
+            Pair(21, IntRange(23, 24)),
+            Pair(25, IntRange(26, 31)),
+            Pair(34, IntRange(36, 38)),
+            Pair(39, IntRange(41, 42)),
+            Pair(43, IntRange(45, 46)),
+            Pair(52, IntRange(54, 59))
         )
-    val incomeCategories = Pair("A65", "A69")
+    val incomeCategories = Pair(65, 69)
 
     val bot = bot {
         token = args[0]
         val chatId: Long = args[1].toLong()
         val spreadsheetId = args[2]
         val sheetId = "Бюджет"
+        val itemIndex = AtomicInteger(Int.MIN_VALUE)
 
         dispatch {
+            message(Filter.Text) { bot, update ->
+                if (getChatId(update.message) != chatId) {
+                    return@message
+                }
+                if (itemIndex.get() < 0) {
+                    bot.sendMessage(chatId = chatId, text = "Непонятно, что это всё значит")
+                }
+                val msgText = update.message?.text?.trim() ?: return@message
+                try {
+                    val amount = msgText.toLong()
+                    //TODO check that it's not negative
+//                    getSheetsService().spreadsheets().batchUpdate(spreadsheetId, BatchUpdateSpreadsheetRequest().requests = listOf(
+//                        Request().updateCells = UpdateCellsRequest().
+//                    ))
+                    //TODO update cell in the sheet
+                } catch (e: NumberFormatException) {
+                    bot.sendMessage(chatId = chatId, text = "Это не похоже на число. Попробуй еще раз.")
+                }
+            }
             command("start") { bot, update ->
                 if (getChatId(update.message) != chatId) {
                     return@command
                 }
                 //TODO implement getting spreadsheetId and sheetId
             }
+            command("clear") { bot, update ->
+                itemIndex.set(Int.MIN_VALUE)
+                bot.sendMessage(chatId = chatId, text = "Всё, проехали")
+            }
             command("exp") { bot, update ->
                 if (getChatId(update.message) != chatId) {
                     return@command
                 }
                 val sheetsService = getSheetsService()
-                val rangeTemplate = "%s!%s"
+                val rangeTemplate = "%s!%s%s"
                 val categoryRanges: List<String> =
-                    expenseCategoriesMap.keys.map { categoryCell -> rangeTemplate.format(sheetId, categoryCell) }
+                    expenseCategoriesMap.keys.map { categoryCell ->
+                        rangeTemplate.format(
+                            sheetId,
+                            categoryColumn,
+                            categoryCell
+                        )
+                    }
                 val response =
                     sheetsService.spreadsheets().values().batchGet(spreadsheetId)
                         .setRanges(categoryRanges).execute()
-                val categories: List<Pair<String, String>> =
+                val categories: List<Pair<String, Int>> =
                     response.valueRanges.map {
                         Pair(
-                            it.getValues().first().first(),
-                            it.range.replaceBefore("!", "").drop(1)
+                            it.getValues().first().first() as String,
+                            it.range.replaceBefore("!", "").drop(1).removePrefix(categoryColumn).toInt()
                         )
-                    } as List<Pair<String, String>>
+                    }
                 val categoryButtons: List<List<InlineKeyboardButton>> =
                     categories.map {
                         listOf(InlineKeyboardButton(text = it.first, callbackData = "exp.category.${it.second}"))
@@ -77,7 +113,7 @@ fun main(args: Array<String>) {
 
                 bot.sendMessage(
                     chatId = chatId,
-                    text = "Choose a category",
+                    text = "Выберите группу:",
                     replyMarkup = InlineKeyboardMarkup(categoryButtons)
                 )
             }
@@ -93,19 +129,31 @@ fun main(args: Array<String>) {
                 val callbackInfo: List<String> = callbackId.split(".")
                 val commandName = callbackInfo[0]
                 val subCommandName = callbackInfo[1]
-                val payload = callbackInfo[2]
+                val payload = callbackInfo[2].toInt()
                 if (commandName == "exp") {
                     if (subCommandName == "category") {
                         val sheetsService = getSheetsService()
-                        val rangeTemplate = "%s!%s:%s"
-                        val (rangeStart, rangeEnd) = expenseCategoriesMap[payload] ?: return@callbackQuery
+                        val rangeTemplate = "%s!%s%s:%s%s"
+                        val categoryRange = expenseCategoriesMap[payload] ?: return@callbackQuery
                         val response =
                             sheetsService.spreadsheets().values()
-                                .get(spreadsheetId, rangeTemplate.format(sheetId, rangeStart, rangeEnd))
+                                .get(
+                                    spreadsheetId,
+                                    rangeTemplate.format(
+                                        sheetId,
+                                        categoryColumn,
+                                        categoryRange.first,
+                                        categoryColumn,
+                                        categoryRange.last
+                                    )
+                                )
                                 .setMajorDimension("COLUMNS").execute()
 
-                        val catItems: List<Pair<String, String>> =
-                            response.getValues().first().map { Pair(it as String, "A...") }
+//                        val rangeSequence =
+//                            generateSequence(categoryRange.first, { i -> i.plus(categoryRange.step) })
+                        val catRangeItr = categoryRange.iterator()
+                        val catItems: List<Pair<String, Int>> =
+                            response.getValues().first().map { Pair(it as String, catRangeItr.nextInt()) }
                         val catItemButtons: List<List<InlineKeyboardButton>> = catItems.map {
                             listOf(
                                 InlineKeyboardButton(
@@ -118,8 +166,15 @@ fun main(args: Array<String>) {
                         bot.editMessageText(
                             chatId = chatId,
                             messageId = update.callbackQuery?.message?.messageId,
-                            text = "Choose an item",
+                            text = "Теперь - категорию:",
                             replyMarkup = InlineKeyboardMarkup(catItemButtons)
+                        )
+                    } else if (subCommandName == "item") {
+                        itemIndex.set(payload)
+                        bot.editMessageText(
+                            chatId = chatId,
+                            messageId = update.callbackQuery?.message?.messageId,
+                            text = "Введите сумму или отправьте /clear, чтобы сбросить операцию"
                         )
                     }
                 }
@@ -137,15 +192,6 @@ private fun getSheetsService(): Sheets {
 }
 
 private fun getChatId(msg: Message?): Long = msg?.chat?.id ?: Long.MIN_VALUE
-
-fun generateButtons(): List<List<InlineKeyboardButton>> {
-    return listOf(
-        listOf(
-            InlineKeyboardButton(text = "\uD83D\uDE1BЗайти", callbackData = "testButton"),
-            InlineKeyboardButton(text = "\uD83D\uDCA8Выбраться", callbackData = "showAlert")
-        )
-    )
-}
 
 fun getCredentials(httpTransport: NetHttpTransport): Credential {
     val credsJson = NetHttpTransport::class.java.getResourceAsStream("/credentials.json")
