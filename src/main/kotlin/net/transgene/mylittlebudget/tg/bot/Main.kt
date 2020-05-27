@@ -8,9 +8,7 @@ import com.github.kotlintelegrambot.dispatcher.message
 import com.github.kotlintelegrambot.entities.InlineKeyboardButton
 import com.github.kotlintelegrambot.entities.InlineKeyboardMarkup
 import com.github.kotlintelegrambot.entities.Message
-import com.github.kotlintelegrambot.entities.Update
 import com.github.kotlintelegrambot.extensions.filters.Filter
-import com.github.kotlintelegrambot.network.Response
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.extensions.java6.auth.oauth2.AuthorizationCodeInstalledApp
 import com.google.api.client.extensions.jetty.auth.oauth2.LocalServerReceiver
@@ -22,15 +20,14 @@ import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.client.util.store.FileDataStoreFactory
 import com.google.api.services.sheets.v4.Sheets
 import com.google.api.services.sheets.v4.SheetsScopes
-import com.google.api.services.sheets.v4.model.BatchUpdateSpreadsheetRequest
-import com.google.api.services.sheets.v4.model.Request
-import com.google.api.services.sheets.v4.model.UpdateCellsRequest
+import com.google.api.services.sheets.v4.model.ValueRange
 import java.io.File
 import java.io.InputStreamReader
 import java.util.concurrent.atomic.AtomicInteger
 
 fun main(args: Array<String>) {
     val categoryColumn = "A"
+    val currentMonthColumn = "B"
     val expenseCategoriesMap: Map<Int, IntRange> =
         mapOf(
             Pair(2, IntRange(4, 7)),
@@ -59,17 +56,50 @@ fun main(args: Array<String>) {
                 }
                 if (itemIndex.get() < 0) {
                     bot.sendMessage(chatId = chatId, text = "Непонятно, что это всё значит")
+                    return@message
                 }
                 val msgText = update.message?.text?.trim() ?: return@message
                 try {
                     val amount = msgText.toLong()
-                    //TODO check that it's not negative
-//                    getSheetsService().spreadsheets().batchUpdate(spreadsheetId, BatchUpdateSpreadsheetRequest().requests = listOf(
-//                        Request().updateCells = UpdateCellsRequest().
-//                    ))
-                    //TODO update cell in the sheet
+                    if (amount < 0) {
+                        bot.sendMessage(
+                            chatId = chatId,
+                            text = "Пока что мы не поддерживаем отрицательные величины. \nПопробуй еще раз."
+                        )
+                        return@message
+                    } else if (amount == 0L) {
+                        bot.sendMessage(chatId = chatId, text = "Почему ноль? Попробуй еще раз.")
+                        return@message
+                    }
+                    val rangeTemplate = "%s!%s%s"
+                    val cellRange =
+                        rangeTemplate.format(sheetId, currentMonthColumn, itemIndex.get())
+                    val cellValueRange: ValueRange = getSheetsService().spreadsheets().values().get(
+                        spreadsheetId, cellRange
+                    ).setValueRenderOption("FORMULA").execute()
+                    val valueWrapper: List<List<Any>>? = cellValueRange.getValues()
+                    val cellValue = valueWrapper?.first()?.first()?.toString() as String?
+                    val toBeInserted = when {
+                        cellValue == null || cellValue.isBlank() -> "=$amount"
+                        !cellValue.startsWith("=") -> "=$cellValue+$amount"
+                        else -> "$cellValue+$amount"
+                    }
+                    getSheetsService().spreadsheets().values().update(
+                        spreadsheetId, cellRange,
+                        ValueRange().setValues(
+                            listOf(listOf(toBeInserted))
+                        )
+                    ).setValueInputOption("USER_ENTERED").execute()
+                    itemIndex.set(Int.MIN_VALUE)
+                    bot.sendMessage(
+                        chatId = chatId,
+                        text = "Поздравляю, ты потратил еще немного денег!"
+                    )
                 } catch (e: NumberFormatException) {
-                    bot.sendMessage(chatId = chatId, text = "Это не похоже на число. Попробуй еще раз.")
+                    bot.sendMessage(
+                        chatId = chatId,
+                        text = "Это не похоже на число. Попробуй еще раз."
+                    )
                 }
             }
             command("start") { bot, update ->
@@ -79,6 +109,9 @@ fun main(args: Array<String>) {
                 //TODO implement getting spreadsheetId and sheetId
             }
             command("clear") { bot, update ->
+                if (getChatId(update.message) != chatId) {
+                    return@command
+                }
                 itemIndex.set(Int.MIN_VALUE)
                 bot.sendMessage(chatId = chatId, text = "Всё, проехали")
             }
@@ -86,6 +119,7 @@ fun main(args: Array<String>) {
                 if (getChatId(update.message) != chatId) {
                     return@command
                 }
+                itemIndex.set(Int.MIN_VALUE)
                 val sheetsService = getSheetsService()
                 val rangeTemplate = "%s!%s%s"
                 val categoryRanges: List<String> =
@@ -103,12 +137,18 @@ fun main(args: Array<String>) {
                     response.valueRanges.map {
                         Pair(
                             it.getValues().first().first() as String,
-                            it.range.replaceBefore("!", "").drop(1).removePrefix(categoryColumn).toInt()
+                            it.range.replaceBefore("!", "").drop(1).removePrefix(categoryColumn)
+                                .toInt()
                         )
                     }
                 val categoryButtons: List<List<InlineKeyboardButton>> =
                     categories.map {
-                        listOf(InlineKeyboardButton(text = it.first, callbackData = "exp.category.${it.second}"))
+                        listOf(
+                            InlineKeyboardButton(
+                                text = it.first,
+                                callbackData = "exp.category.${it.second}"
+                            )
+                        )
                     }
 
                 bot.sendMessage(
@@ -153,7 +193,8 @@ fun main(args: Array<String>) {
 //                            generateSequence(categoryRange.first, { i -> i.plus(categoryRange.step) })
                         val catRangeItr = categoryRange.iterator()
                         val catItems: List<Pair<String, Int>> =
-                            response.getValues().first().map { Pair(it as String, catRangeItr.nextInt()) }
+                            response.getValues().first()
+                                .map { Pair(it as String, catRangeItr.nextInt()) }
                         val catItemButtons: List<List<InlineKeyboardButton>> = catItems.map {
                             listOf(
                                 InlineKeyboardButton(
