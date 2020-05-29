@@ -9,20 +9,15 @@ import com.github.kotlintelegrambot.entities.InlineKeyboardButton
 import com.github.kotlintelegrambot.entities.InlineKeyboardMarkup
 import com.github.kotlintelegrambot.entities.Message
 import com.github.kotlintelegrambot.extensions.filters.Filter
-import com.google.api.client.auth.oauth2.Credential
-import com.google.api.client.extensions.java6.auth.oauth2.AuthorizationCodeInstalledApp
-import com.google.api.client.extensions.jetty.auth.oauth2.LocalServerReceiver
-import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeFlow
-import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
+import com.google.api.client.http.HttpRequestInitializer
 import com.google.api.client.http.javanet.NetHttpTransport
 import com.google.api.client.json.jackson2.JacksonFactory
-import com.google.api.client.util.store.FileDataStoreFactory
 import com.google.api.services.sheets.v4.Sheets
 import com.google.api.services.sheets.v4.SheetsScopes
 import com.google.api.services.sheets.v4.model.ValueRange
-import java.io.File
-import java.io.InputStreamReader
+import com.google.auth.http.HttpCredentialsAdapter
+import com.google.auth.oauth2.GoogleCredentials
 import java.util.concurrent.atomic.AtomicInteger
 
 fun main(args: Array<String>) {
@@ -78,7 +73,7 @@ fun main(args: Array<String>) {
                         spreadsheetId, cellRange
                     ).setValueRenderOption("FORMULA").execute()
                     val valueWrapper: List<List<Any>>? = cellValueRange.getValues()
-                    val cellValue = valueWrapper?.first()?.first()?.toString() as String?
+                    val cellValue = valueWrapper?.first()?.first()?.toString()
                     val toBeInserted = when {
                         cellValue == null || cellValue.isBlank() -> "=$amount"
                         !cellValue.startsWith("=") -> "=$cellValue+$amount"
@@ -227,28 +222,18 @@ fun main(args: Array<String>) {
 
 private fun getSheetsService(): Sheets {
     val transport = GoogleNetHttpTransport.newTrustedTransport()
-
-    return Sheets.Builder(transport, JacksonFactory.getDefaultInstance(), getCredentials(transport))
+    val credentials = getCredentials()
+    return Sheets.Builder(transport, JacksonFactory.getDefaultInstance(), credentials)
         .setApplicationName("wubwubwub").build()
 }
 
 private fun getChatId(msg: Message?): Long = msg?.chat?.id ?: Long.MIN_VALUE
 
-fun getCredentials(httpTransport: NetHttpTransport): Credential {
-    val credsJson = NetHttpTransport::class.java.getResourceAsStream("/credentials.json")
-    val jsonFactory = JacksonFactory.getDefaultInstance()
-    val clientSecrets = GoogleClientSecrets.load(jsonFactory, InputStreamReader(credsJson))
-    val flow = GoogleAuthorizationCodeFlow.Builder(
-        httpTransport,
-        jsonFactory,
-        clientSecrets,
-        listOf(SheetsScopes.SPREADSHEETS)
+fun getCredentials(): HttpRequestInitializer {
+    val credsJson =
+        NetHttpTransport::class.java.getResourceAsStream("/service-acc-credentials.json")
+    return HttpCredentialsAdapter(
+        GoogleCredentials.fromStream(credsJson).createScoped(SheetsScopes.SPREADSHEETS)
     )
-        .setDataStoreFactory(
-            FileDataStoreFactory(
-                File("tokens")
-            )
-        ).build()
-    val receiver = LocalServerReceiver.Builder().setPort(8888).build()
-    return AuthorizationCodeInstalledApp(flow, receiver).authorize("user")
 }
+
