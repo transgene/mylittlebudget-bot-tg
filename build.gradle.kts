@@ -39,4 +39,8 @@ tasks {
             attributes["Main-Class"] = "net.transgene.mylittlebudget.tg.bot.MainKt"
         }
     }
+
+    shadowJar {
+        archiveFileName.set("${rootProject.name}-fat.jar")
+    }
 }
