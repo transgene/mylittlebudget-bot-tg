@@ -68,14 +68,4 @@ jobs:
           environment_name: MlbTgBotFa-env
           version_label: ${{ env.TAG_NAME }}
           region: us-east-2
-          deployment_package: ${{ env.SOURCE_BUNDLE_NAME }}
-#      - name: Upload SB
-#        uses: actions/upload-artifact@v2
-#        with:
-#          name: sb-to-deploy
-#          path: ${{ env.DEPLOY_DIR_PATH }}/${{ env.SOURCE_BUNDLE_NAME }}
-#
-#      - name: List files in deploy folder
-#        run: ls -lR
-#        working-directory: deploy
-
+          deployment_package: ${{ env.DEPLOY_DIR_PATH }}/${{ env.SOURCE_BUNDLE_NAME }}
