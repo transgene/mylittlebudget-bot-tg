@@ -1,16 +1,20 @@
 name: Full cycle (build and deploy to AWS)
+
 on:
   push:
     tags:
       - "v*"
+
 env:
   BUILD_ARTIFACT_NAME: app
   JAR_NAME: mylittlebudget-bot-tg-fat.jar
   GOOGLE_CREDS_FILE_NAME: google-api-credentials.json
   DEPLOY_DIR_PATH: deploy
+
 defaults:
   run:
     shell: bash
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,8 +27,13 @@ jobs:
           architecture: x64
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
+      - name: Cache Gradle packages
+        uses: actions/cache@v2
+        with:
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle') }}
+          restore-keys: ${{ runner.os }}-gradle
       - name: Build fat JAR
-        shell: bash
         run: ./gradlew shadowJar
       - name: Upload JAR
         uses: actions/upload-artifact@v2
