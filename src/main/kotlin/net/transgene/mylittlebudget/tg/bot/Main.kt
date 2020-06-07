@@ -18,6 +18,7 @@ import com.google.api.services.sheets.v4.SheetsScopes
 import com.google.api.services.sheets.v4.model.ValueRange
 import com.google.auth.http.HttpCredentialsAdapter
 import com.google.auth.oauth2.GoogleCredentials
+import java.io.FileInputStream
 import java.util.concurrent.atomic.AtomicInteger
 
 fun main(args: Array<String>) {
@@ -230,8 +231,7 @@ private fun getSheetsService(): Sheets {
 private fun getChatId(msg: Message?): Long = msg?.chat?.id ?: Long.MIN_VALUE
 
 fun getCredentials(): HttpRequestInitializer {
-    val credsJson =
-        NetHttpTransport::class.java.getResourceAsStream("/service-acc-credentials.json")
+    val credsJson = FileInputStream("./google-api-credentials.json")
     return HttpCredentialsAdapter(
         GoogleCredentials.fromStream(credsJson).createScoped(SheetsScopes.SPREADSHEETS)
     )
