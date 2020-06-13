@@ -11,7 +11,6 @@ import com.github.kotlintelegrambot.entities.Message
 import com.github.kotlintelegrambot.extensions.filters.Filter
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.http.HttpRequestInitializer
-import com.google.api.client.http.javanet.NetHttpTransport
 import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.services.sheets.v4.Sheets
 import com.google.api.services.sheets.v4.SheetsScopes
@@ -20,22 +19,34 @@ import com.google.auth.http.HttpCredentialsAdapter
 import com.google.auth.oauth2.GoogleCredentials
 import java.io.FileInputStream
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 fun main(args: Array<String>) {
     val categoryColumn = "A"
     val currentMonthColumn = "B"
-    val expenseCategoriesMap: Map<Int, IntRange> =
+    val nonRecurringExpenseGroups: Map<Int, IntRange> =
         mapOf(
             Pair(2, IntRange(4, 7)),
             Pair(8, IntRange(10, 11)),
             Pair(12, IntRange(13, 20)),
             Pair(21, IntRange(23, 24)),
-            Pair(25, IntRange(26, 31)),
+            Pair(25, IntRange(26, 31))
+        )
+    val recurringExpenseGroups: Map<Int, IntRange> =
+        mapOf(
             Pair(34, IntRange(36, 38)),
             Pair(39, IntRange(41, 42)),
             Pair(43, IntRange(45, 46)),
             Pair(52, IntRange(54, 59))
         )
+    val savingsExpenseGroups: Map<Int, IntRange> =
+        mapOf(
+            Pair(34, IntRange(36, 38)),
+            Pair(39, IntRange(41, 42)),
+            Pair(43, IntRange(45, 46)),
+            Pair(52, IntRange(54, 59))
+        )
+    val allExpenseGroups = nonRecurringExpenseGroups + recurringExpenseGroups + savingsExpenseGroups
     val incomeCategories = Pair(65, 69)
 
     val bot = bot {
@@ -44,6 +55,7 @@ fun main(args: Array<String>) {
         val spreadsheetId = args[2]
         val sheetId = "Бюджет"
         val itemIndex = AtomicInteger(Int.MIN_VALUE)
+        val itemName = AtomicReference<String>()
 
         dispatch {
             message(Filter.Text) { bot, update ->
@@ -51,7 +63,7 @@ fun main(args: Array<String>) {
                     return@message
                 }
                 if (itemIndex.get() < 0) {
-                    bot.sendMessage(chatId = chatId, text = "Непонятно, что это всё значит")
+                    bot.sendMessage(chatId = chatId, text = "Простите, не могу понять, к какой операции это относится.")
                     return@message
                 }
                 val msgText = update.message?.text?.trim() ?: return@message
@@ -60,23 +72,24 @@ fun main(args: Array<String>) {
                     if (amount < 0) {
                         bot.sendMessage(
                             chatId = chatId,
-                            text = "Пока что мы не поддерживаем отрицательные величины. \nПопробуй еще раз."
+                            text = "Простите, но пока что я не поддерживаю отрицательные суммы.\nПопробуйте еще раз, пожалуйста."
                         )
                         return@message
                     } else if (amount == 0L) {
-                        bot.sendMessage(chatId = chatId, text = "Почему ноль? Попробуй еще раз.")
+                        bot.sendMessage(chatId = chatId, text = "Простите, но 0 я записывать не буду.\nПопробуйте еще раз, пожалуйста.")
                         return@message
                     }
                     val rangeTemplate = "%s!%s%s"
                     val cellRange =
                         rangeTemplate.format(sheetId, currentMonthColumn, itemIndex.get())
-                    val cellValueRange: ValueRange = getSheetsService().spreadsheets().values().get(
-                        spreadsheetId, cellRange
-                    ).setValueRenderOption("FORMULA").execute()
+                    val cellValueRange: ValueRange =
+                        getSheetsService().spreadsheets().values().get(spreadsheetId, cellRange)
+                            .setValueRenderOption("FORMULA")
+                            .execute()
                     val valueWrapper: List<List<Any>>? = cellValueRange.getValues()
                     val cellValue = valueWrapper?.first()?.first()?.toString()
                     val toBeInserted = when {
-                        cellValue == null || cellValue.isBlank() -> "=$amount"
+                        cellValue.isNullOrBlank() -> "=$amount"
                         !cellValue.startsWith("=") -> "=$cellValue+$amount"
                         else -> "$cellValue+$amount"
                     }
@@ -89,12 +102,12 @@ fun main(args: Array<String>) {
                     itemIndex.set(Int.MIN_VALUE)
                     bot.sendMessage(
                         chatId = chatId,
-                        text = "Поздравляю, ты потратил еще немного денег!"
+                        text = "Поздравляю! Вы потратили еще $amount рублей на \"${itemName.get()}\"."
                     )
                 } catch (e: NumberFormatException) {
                     bot.sendMessage(
                         chatId = chatId,
-                        text = "Это не похоже на число. Попробуй еще раз."
+                        text = "Кажется, это не число.\nПопробуйте еще раз, пожалуйста."
                     )
                 }
             }
@@ -109,7 +122,7 @@ fun main(args: Array<String>) {
                     return@command
                 }
                 itemIndex.set(Int.MIN_VALUE)
-                bot.sendMessage(chatId = chatId, text = "Всё, проехали")
+                bot.sendMessage(chatId = chatId, text = "Операция завершена. Можно начать снова.")
             }
             command("exp") { bot, update ->
                 if (getChatId(update.message) != chatId) {
@@ -117,28 +130,53 @@ fun main(args: Array<String>) {
                 }
                 itemIndex.set(Int.MIN_VALUE)
                 val sheetsService = getSheetsService()
-                val rangeTemplate = "%s!%s%s"
-                val categoryRanges: List<String> =
-                    expenseCategoriesMap.keys.map { categoryCell ->
-                        rangeTemplate.format(
+                val groupRangeTemplate = "%s!%s%s"
+                val expenseGroupRanges: List<String> =
+                    allExpenseGroups.keys.map { groupCell ->
+                        groupRangeTemplate.format(
                             sheetId,
                             categoryColumn,
-                            categoryCell
+                            groupCell
                         )
                     }
+
+                val groupCategoriesRangeTemplate = "%s!%s%s:%s%s"
+                val expenseCategoriesRanges: List<String> = allExpenseGroups.values.map { categoryRange ->
+                    groupCategoriesRangeTemplate.format(
+                        sheetId,
+                        categoryColumn,
+                        categoryRange.first,
+                        categoryColumn,
+                        categoryRange.last
+                    )
+                }
+
                 val response =
                     sheetsService.spreadsheets().values().batchGet(spreadsheetId)
-                        .setRanges(categoryRanges).execute()
-                val categories: List<Pair<String, Int>> =
-                    response.valueRanges.map {
-                        Pair(
-                            it.getValues().first().first() as String,
-                            it.range.replaceBefore("!", "").drop(1).removePrefix(categoryColumn)
-                                .toInt()
-                        )
+                        .setRanges(expenseGroupRanges + expenseCategoriesRanges)
+                        .setMajorDimension("COLUMNS")
+                        .execute()
+
+                val categoriesResponse = response.valueRanges.drop(expenseGroupRanges.size)
+                val categoryNames: List<String> = categoriesResponse.map {
+                    val catList = it.getValues().first() as List<String>
+                    catList.joinToString(prefix = "(", postfix = ")", limit = 3) {
+                        it.trimStart().take(5).trimEnd()
+//                        val name = it.trim()
+//                        if (name.length > 5 && !name[5].isWhitespace()) name.take(5) + "." else name.take(5)
                     }
-                val categoryButtons: List<List<InlineKeyboardButton>> =
-                    categories.map {
+                }
+
+                val groupsResponse = response.valueRanges.subList(0, expenseGroupRanges.size)
+                val groups: List<Pair<String, Int>> = groupsResponse.mapIndexed { i, valRange ->
+                    Pair(
+                        "${(valRange.getValues().first().first() as String).trim()} ${categoryNames[i]}",
+                        valRange.range.replaceBefore("!", "").drop(1).removePrefix(categoryColumn).toInt()
+                    )
+                }
+
+                val groupButtons: List<List<InlineKeyboardButton>> =
+                    groups.map {
                         listOf(
                             InlineKeyboardButton(
                                 text = it.first,
@@ -150,7 +188,7 @@ fun main(args: Array<String>) {
                 bot.sendMessage(
                     chatId = chatId,
                     text = "Выберите группу:",
-                    replyMarkup = InlineKeyboardMarkup(categoryButtons)
+                    replyMarkup = InlineKeyboardMarkup(groupButtons)
                 )
             }
 
@@ -162,7 +200,7 @@ fun main(args: Array<String>) {
                 if (callbackId == null) {
                     return@callbackQuery
                 }
-                val callbackInfo: List<String> = callbackId.split(".")
+                val callbackInfo: List<String> = callbackId.split(delimiters = *arrayOf("."), limit = 4)
                 val commandName = callbackInfo[0]
                 val subCommandName = callbackInfo[1]
                 val payload = callbackInfo[2].toInt()
@@ -170,7 +208,7 @@ fun main(args: Array<String>) {
                     if (subCommandName == "category") {
                         val sheetsService = getSheetsService()
                         val rangeTemplate = "%s!%s%s:%s%s"
-                        val categoryRange = expenseCategoriesMap[payload] ?: return@callbackQuery
+                        val categoryRange = allExpenseGroups[payload] ?: return@callbackQuery
                         val response =
                             sheetsService.spreadsheets().values()
                                 .get(
@@ -185,8 +223,6 @@ fun main(args: Array<String>) {
                                 )
                                 .setMajorDimension("COLUMNS").execute()
 
-//                        val rangeSequence =
-//                            generateSequence(categoryRange.first, { i -> i.plus(categoryRange.step) })
                         val catRangeItr = categoryRange.iterator()
                         val catItems: List<Pair<String, Int>> =
                             response.getValues().first()
@@ -195,7 +231,7 @@ fun main(args: Array<String>) {
                             listOf(
                                 InlineKeyboardButton(
                                     text = it.first,
-                                    callbackData = "exp.item.${it.second}"
+                                    callbackData = "exp.item.${it.second}.${it.first}"
                                 )
                             )
                         }
@@ -208,10 +244,11 @@ fun main(args: Array<String>) {
                         )
                     } else if (subCommandName == "item") {
                         itemIndex.set(payload)
+                        itemName.set(callbackInfo[3])
                         bot.editMessageText(
                             chatId = chatId,
                             messageId = update.callbackQuery?.message?.messageId,
-                            text = "Введите сумму или отправьте /clear, чтобы сбросить операцию"
+                            text = "Введите сумму или отправьте /clear, чтобы завершить операцию."
                         )
                     }
                 }
