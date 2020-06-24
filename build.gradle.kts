@@ -1,11 +1,14 @@
+import pl.allegro.tech.build.axion.release.domain.hooks.HookContext
+
 group = "net.transgene.mylittlebudget"
-version = "0.3.0"
+version = scmVersion.version
 
 plugins {
     java
     kotlin("jvm") version "1.3.72"
 
     id("com.github.johnrengelman.shadow") version "5.2.0"
+    id("pl.allegro.tech.build.axion-release") version "1.12.0"
 }
 
 repositories {
@@ -42,5 +45,18 @@ tasks {
 
     shadowJar {
         archiveFileName.set("${rootProject.name}-fat.jar")
+    }
+
+    scmVersion {
+        tag.prefix = "v"
+        tag.versionSeparator = ""
+
+        hooks.pre(
+            KotlinClosure1<HookContext, Unit>({
+                if ("master" != scmPosition.branch) {
+                    throw GradleException("Releases are only allowed on master branch!")
+                }
+            })
+        )
     }
 }
