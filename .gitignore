@@ -1,5 +1,4 @@
 .idea
 build
 .gradle
-src/main/resources/credentials.json
-src/main/resources/service-acc-credentials.json
+src/main/resources/credentials
