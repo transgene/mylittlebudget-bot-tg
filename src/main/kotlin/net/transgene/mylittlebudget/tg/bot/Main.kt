@@ -117,13 +117,6 @@ fun main(args: Array<String>) {
                 }
                 //TODO implement getting spreadsheetId and sheetId
             }
-            command("clear") { bot, update ->
-                if (getChatId(update.message) != chatId) {
-                    return@command
-                }
-                itemIndex.set(Int.MIN_VALUE)
-                bot.sendMessage(chatId = chatId, text = "Операция завершена. Можно начать снова.")
-            }
             command("exp") { bot, update ->
                 if (getChatId(update.message) != chatId) {
                     return@command
@@ -203,12 +196,12 @@ fun main(args: Array<String>) {
                 val callbackInfo: List<String> = callbackId.split(delimiters = *arrayOf("."), limit = 4)
                 val commandName = callbackInfo[0]
                 val subCommandName = callbackInfo[1]
-                val payload = callbackInfo[2].toInt()
+                val payload = callbackInfo[2]
                 if (commandName == "exp") {
                     if (subCommandName == "category") {
                         val sheetsService = getSheetsService()
                         val rangeTemplate = "%s!%s%s:%s%s"
-                        val categoryRange = allExpenseGroups[payload] ?: return@callbackQuery
+                        val categoryRange = allExpenseGroups[payload.toInt()] ?: return@callbackQuery
                         val response =
                             sheetsService.spreadsheets().values()
                                 .get(
@@ -243,12 +236,23 @@ fun main(args: Array<String>) {
                             replyMarkup = InlineKeyboardMarkup(catItemButtons)
                         )
                     } else if (subCommandName == "item") {
-                        itemIndex.set(payload)
+                        itemIndex.set(payload.toInt())
                         itemName.set(callbackInfo[3])
                         bot.editMessageText(
                             chatId = chatId,
                             messageId = update.callbackQuery?.message?.messageId,
-                            text = "Введите сумму или отправьте /clear, чтобы завершить операцию."
+                            text = "Пожалуйста, введите сумму.\nИли нажмите кнопку, и я завершу операцию.",
+                            replyMarkup = InlineKeyboardMarkup.createSingleButton(
+                                InlineKeyboardButton(
+                                    text = "Отменить",
+                                    callbackData = "exp.cancel.none"
+                                )
+                            )
+                        )
+                    } else if (subCommandName == "cancel") {
+                        bot.deleteMessage(
+                            chatId = chatId,
+                            messageId = update.callbackQuery?.message?.messageId
                         )
                     }
                 }
