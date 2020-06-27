@@ -1,4 +1,6 @@
+import pl.allegro.tech.build.axion.release.ReleaseTask
 import pl.allegro.tech.build.axion.release.domain.hooks.HookContext
+import pl.allegro.tech.build.axion.release.infrastructure.di.GradleAwareContext
 
 group = "net.transgene.mylittlebudget"
 version = scmVersion.version
@@ -42,7 +44,6 @@ tasks {
             attributes["Main-Class"] = "net.transgene.mylittlebudget.tg.bot.MainKt"
         }
     }
-
     shadowJar {
         archiveFileName.set("${rootProject.name}-fat.jar")
     }
@@ -58,5 +59,25 @@ tasks {
                 }
             })
         )
+    }
+    register<ReleaseTask>("releaseFeature") {
+        group = "release"
+        description = "Releases new feature using Axion"
+
+        doFirst {
+            val versionConfig = GradleAwareContext.config(project)
+            versionConfig.versionIncrementer("incrementMinor")
+            setVersionConfig(versionConfig)
+        }
+    }
+    register<ReleaseTask>("releaseFix") {
+        group = "release"
+        description = "Releases new fix using Axion"
+
+        doFirst {
+            val versionConfig = GradleAwareContext.config(project)
+            versionConfig.versionIncrementer("incrementPatch")
+            setVersionConfig(versionConfig)
+        }
     }
 }
