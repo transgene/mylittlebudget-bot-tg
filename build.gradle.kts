@@ -1,6 +1,11 @@
+import com.github.zafarkhaja.semver.Version
+import org.eclipse.jgit.api.Git.open
+import org.eclipse.jgit.lib.Constants.HEAD
 import pl.allegro.tech.build.axion.release.ReleaseTask
+import pl.allegro.tech.build.axion.release.domain.VersionIncrementerContext
 import pl.allegro.tech.build.axion.release.domain.hooks.HookContext
 import pl.allegro.tech.build.axion.release.infrastructure.di.GradleAwareContext
+import java.util.regex.Pattern
 
 group = "net.transgene.mylittlebudget"
 version = scmVersion.version
@@ -52,32 +57,42 @@ tasks {
         tag.prefix = "v"
         tag.versionSeparator = ""
 
+        versionIncrementer = KotlinClosure1<VersionIncrementerContext, Version>({
+            val versionConfig = GradleAwareContext.config(project)
+            val repo = GradleAwareContext.create(project, versionConfig).repository()
+            val jgit = open(projectDir)
+            val jgitRepo = jgit.repository
+            val latestCommitWithTag = repo.latestTags(Pattern.compile("v\\d+\\.\\d+\\.\\d+"))
+            val commitsSinceLastRelease =
+                jgit.log().addRange(
+                    jgitRepo.resolve(latestCommitWithTag.commitId),
+                    jgitRepo.resolve(HEAD)
+                ).call()
+                    .groupingBy { it.shortMessage.substringBefore(":").trimStart().toLowerCase() }
+                    .eachCount()
+            val minorIncrement = commitsSinceLastRelease["feat"] ?: 0
+            val patchIncrement = commitsSinceLastRelease["fix"] ?: 0
+
+            println("Found $minorIncrement new feature(s) and $patchIncrement bugfix(es) since latest release ${latestCommitWithTag.tags[0]} (${latestCommitWithTag.commitId})")
+            if (minorIncrement == 0 && patchIncrement == 0) {
+                println("Nothing to release. Skipping the task")
+                throw StopExecutionException()
+            }
+
+            val currentVersion = this.currentVersion
+            val major = currentVersion.majorVersion
+            val minor = currentVersion.minorVersion + minorIncrement
+            val patch = currentVersion.patchVersion + patchIncrement
+
+            Version.forIntegers(major, minor, patch)
+        })
+
         hooks.pre(
             KotlinClosure1<HookContext, Unit>({
-                if ("master" != scmPosition.branch) {
+                if ("master" != this.position.branch) {
                     throw GradleException("Releases are only allowed on master branch!")
                 }
             })
         )
-    }
-    register<ReleaseTask>("releaseFeature") {
-        group = "release"
-        description = "Releases new feature using Axion"
-
-        doFirst {
-            val versionConfig = GradleAwareContext.config(project)
-            versionConfig.versionIncrementer("incrementMinor")
-            setVersionConfig(versionConfig)
-        }
-    }
-    register<ReleaseTask>("releaseFix") {
-        group = "release"
-        description = "Releases new fix using Axion"
-
-        doFirst {
-            val versionConfig = GradleAwareContext.config(project)
-            versionConfig.versionIncrementer("incrementPatch")
-            setVersionConfig(versionConfig)
-        }
     }
 }
