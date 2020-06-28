@@ -2,8 +2,10 @@ name: Full cycle (build and deploy to AWS)
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - "master"
+    tags-ignore:
+      - "**"
 
 env:
   BUILD_ARTIFACT_NAME: app
@@ -18,8 +20,13 @@ defaults:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      releaseMade: ${{ steps.releaseMade.outputs.general }}
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout the sources
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
       - name: Set up JDK 1.8
         uses: actions/setup-java@v1.3.0
         with:
@@ -35,7 +42,23 @@ jobs:
           restore-keys: ${{ runner.os }}-gradle
       - name: Build fat JAR
         run: ./gradlew shadowJar
+      - name: Save last released version to env
+        run: echo ::set-env name=LAST_VERSION::$(./gradlew latestVersion --quiet)
+      - name: Echo last released version
+        run: echo ${{ env.LAST_VERSION }}
+      - name: Make new release if needed
+        run: |
+          ./gradlew release -Prelease.disableRemoteCheck -Prelease.disableUncommittedCheck -Prelease.customUsername=${{ github.repository_owner }} -Prelease.customPassword=${{ secrets.GH_PAT_AXION }}
+      - name: Save latest version to env
+        run: echo ::set-env name=LATEST_VERSION::$(./gradlew latestVersion --quiet)
+      - name: Echo latest version
+        run: echo ${{ env.LATEST_VERSION }}
+      - name: Find out whether a release was made
+        id: releaseMade
+        run: |
+          echo ::set-output name=general::${{ env.LAST_VERSION != env.LATEST_VERSION }}
       - name: Upload JAR
+        if: ${{ steps.releaseMade.outputs.general == 'true' }}
         uses: actions/upload-artifact@v2
         with:
           name: ${{ env.BUILD_ARTIFACT_NAME }}
@@ -44,6 +67,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    if: ${{ needs.build.outputs.releaseMade == 'true' }}
     defaults:
       run:
         working-directory: ${{ env.DEPLOY_DIR_PATH }}

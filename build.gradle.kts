@@ -89,10 +89,22 @@ tasks {
 
         hooks.pre(
             KotlinClosure1<HookContext, Unit>({
-                if ("master" != this.position.branch) {
-                    throw GradleException("Releases are only allowed on master branch!")
+//                if ("master" != this.position.branch) {
+//                    throw GradleException("Releases are only allowed on master branch!")
+//                }
+                if ("build/auto-release" != this.position.branch) {
+                    throw GradleException("Releases are only allowed on test branch, and we are on ${this.position.branch}")
                 }
             })
         )
+    }
+
+    register("latestVersion") {
+        group = "release"
+        description = "Gets version name of the latest release"
+
+        val versionConfig = GradleAwareContext.config(project)
+        val repo = GradleAwareContext.create(project, versionConfig).repository()
+        println(repo.latestTags(Pattern.compile("v\\d+\\.\\d+\\.\\d+")).tags[0])
     }
 }
