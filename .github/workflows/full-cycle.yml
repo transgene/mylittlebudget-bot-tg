@@ -10,7 +10,11 @@ on:
 env:
   BUILD_ARTIFACT_NAME: app
   JAR_NAME: mylittlebudget-bot-tg-fat.jar
+  CONFIG_FILE_NAME: config.toml
+  SECRET_CONFIG_DIR: secrets
   GOOGLE_CREDS_FILE_NAME: google-api-credentials.json
+  USERS_CONFIG_DIR: users
+  GENE_CONFIG_FILE_NAME: gene.toml
   DEPLOY_DIR_PATH: deploy
 
 defaults:
@@ -27,10 +31,10 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
-      - name: Set up JDK 1.8
+      - name: Set up JDK 13
         uses: actions/setup-java@v1.3.0
         with:
-          java-version: 1.8
+          java-version: 13
           architecture: x64
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
@@ -78,17 +82,27 @@ jobs:
           name: ${{ env.BUILD_ARTIFACT_NAME }}
           path: ${{ env.DEPLOY_DIR_PATH }}
       - name: Create Procfile
-        env:
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          CHAT_ID: ${{ secrets.CHAT_ID }}
-          SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
         run: |
-          echo "web: java -jar $JAR_NAME $BOT_TOKEN $CHAT_ID $SPREADSHEET_ID" > Procfile
+          echo "web: java -jar $JAR_NAME > Procfile
+      - name: Generate configuration file
+        env:
+          CONFIG: ${{ secrets.CONFIG_FILE }}
+        run: |
+          echo $CONFIG > $CONFIG_FILE_NAME
+      - name: Create directory for secrets
+        run: mkdir $SECRET_CONFIG_DIR && cd $SECRET_CONFIG_DIR
       - name: Generate Google API credentials file
         env:
-            GOOGLE_API_CREDS: ${{ secrets.GOOGLE_API_CREDS }}
+          GOOGLE_API_CREDS: ${{ secrets.GOOGLE_API_CREDS }}
         run: |
           echo $GOOGLE_API_CREDS > $GOOGLE_CREDS_FILE_NAME
+      - name: Create directory for users' configs
+        run: mkdir $USERS_CONFIG_DIR && cd $USERS_CONFIG_DIR
+      - name: Generate config file for user Gene
+        env:
+          USER_CONFIG_GENE: ${{ secrets.USER_CONFIG_GENE }}
+        run: |
+          echo $USER_CONFIG_GENE > $GENE_CONFIG_FILE_NAME
       - name: Set TAG_NAME var
         run: |
           echo ::set-env name=TAG_NAME::$(echo "${GITHUB_REF##*/}")

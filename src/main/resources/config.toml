@@ -1,0 +1,4 @@
+bot-token = "${botToken}"
+google-credentials-path = "secrets/google-api-credentials.json"
+users-config-dir-path = "secrets/users"
+

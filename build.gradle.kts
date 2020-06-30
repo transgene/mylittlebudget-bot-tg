@@ -1,7 +1,6 @@
 import com.github.zafarkhaja.semver.Version
 import org.eclipse.jgit.api.Git.open
 import org.eclipse.jgit.lib.Constants.HEAD
-import pl.allegro.tech.build.axion.release.ReleaseTask
 import pl.allegro.tech.build.axion.release.domain.VersionIncrementerContext
 import pl.allegro.tech.build.axion.release.domain.hooks.HookContext
 import pl.allegro.tech.build.axion.release.infrastructure.di.GradleAwareContext
@@ -30,18 +29,20 @@ dependencies {
     implementation("com.google.oauth-client:google-oauth-client-jetty:1.30.6")
     implementation("com.google.apis:google-api-services-sheets:v4-rev612-1.25.0")
     implementation("com.google.auth:google-auth-library-oauth2-http:0.20.0")
+    implementation("org.ehcache:ehcache:3.8.1")
+    implementation("org.tomlj:tomlj:1.0.0")
 }
 
 configure<JavaPluginConvention> {
-    sourceCompatibility = JavaVersion.VERSION_1_8
+    sourceCompatibility = JavaVersion.VERSION_13
 }
 
 tasks {
     compileKotlin {
-        kotlinOptions.jvmTarget = "1.8"
+        kotlinOptions.jvmTarget = "13"
     }
     compileTestKotlin {
-        kotlinOptions.jvmTarget = "1.8"
+        kotlinOptions.jvmTarget = "13"
     }
 
     jar {
@@ -89,11 +90,8 @@ tasks {
 
         hooks.pre(
             KotlinClosure1<HookContext, Unit>({
-//                if ("master" != this.position.branch) {
-//                    throw GradleException("Releases are only allowed on master branch!")
-//                }
-                if ("build/auto-release" != this.position.branch) {
-                    throw GradleException("Releases are only allowed on test branch, and we are on ${this.position.branch}")
+                if ("master" != this.position.branch) {
+                    throw GradleException("Releases are only allowed on master branch!")
                 }
             })
         )
