@@ -6,15 +6,21 @@ on:
       - "master"
     tags-ignore:
       - "**"
+  workflow_dispatch:
+    inputs:
+      forceDeploy:
+        description: Force deployment (true/false)
+        required: true
+        default: "false"
 
 env:
   BUILD_ARTIFACT_NAME: app
   JAR_NAME: mylittlebudget-bot-tg-fat.jar
   CONFIG_FILE_NAME: config.toml
   SECRET_CONFIG_DIR: secrets
-  GOOGLE_CREDS_FILE_NAME: google-api-credentials.json
-  USERS_CONFIG_DIR: users
-  GENE_CONFIG_FILE_NAME: gene.toml
+  GOOGLE_CREDS_FILE_NAME: secrets/google-api-credentials.json
+  USERS_CONFIG_DIR: secrets/users
+  GENE_CONFIG_FILE_NAME: secrets/users/gene.toml
   DEPLOY_DIR_PATH: deploy
 
 defaults:
@@ -26,6 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       releaseMade: ${{ steps.releaseMade.outputs.general }}
+      versionName: ${{ steps.getVersionName.outputs.general }}
     steps:
       - name: Checkout the sources
         uses: actions/checkout@v2
@@ -60,7 +67,13 @@ jobs:
       - name: Find out whether a release was made
         id: releaseMade
         run: |
-          echo ::set-output name=general::${{ env.LAST_VERSION != env.LATEST_VERSION }}
+          echo ::set-output name=general::${{ env.LAST_VERSION != env.LATEST_VERSION || github.event.inputs.forceDeploy == 'true' }}
+      - name: Get version name
+        id: getVersionName
+        run: |
+          echo ::set-output name=general::${{ env.LATEST_VERSION }}-$GITHUB_SHA
+      - name: Echo version name
+        run: echo ${{ steps.getVersionName.outputs.general }}
       - name: Upload JAR
         if: ${{ steps.releaseMade.outputs.general == 'true' }}
         uses: actions/upload-artifact@v2
@@ -83,35 +96,34 @@ jobs:
           path: ${{ env.DEPLOY_DIR_PATH }}
       - name: Create Procfile
         run: |
-          echo "web: java -jar $JAR_NAME > Procfile
+          echo "web: java -jar $JAR_NAME" > Procfile
       - name: Generate configuration file
         env:
           CONFIG: ${{ secrets.CONFIG_FILE }}
         run: |
           echo $CONFIG > $CONFIG_FILE_NAME
-      - name: Create directory for secrets
-        run: mkdir $SECRET_CONFIG_DIR && cd $SECRET_CONFIG_DIR
+      - name: Create directories for secrets
+        run: |
+          mkdir $SECRET_CONFIG_DIR &&
+          mkdir $USERS_CONFIG_DIR
       - name: Generate Google API credentials file
         env:
           GOOGLE_API_CREDS: ${{ secrets.GOOGLE_API_CREDS }}
         run: |
           echo $GOOGLE_API_CREDS > $GOOGLE_CREDS_FILE_NAME
-      - name: Create directory for users' configs
-        run: mkdir $USERS_CONFIG_DIR && cd $USERS_CONFIG_DIR
       - name: Generate config file for user Gene
         env:
           USER_CONFIG_GENE: ${{ secrets.USER_CONFIG_GENE }}
         run: |
           echo $USER_CONFIG_GENE > $GENE_CONFIG_FILE_NAME
-      - name: Set TAG_NAME var
-        run: |
-          echo ::set-env name=TAG_NAME::$(echo "${GITHUB_REF##*/}")
       - name: Set SOURCE_BUNDLE_NAME var
         run: |
-          echo ::set-env name=SOURCE_BUNDLE_NAME::$(echo "mylittlebudget-bot-tg-$TAG_NAME.zip")
+          echo ::set-env name=SOURCE_BUNDLE_NAME::$(echo "mylittlebudget-bot-tg.zip")
       - name: Zip source bundle
         run: |
-          zip $SOURCE_BUNDLE_NAME $JAR_NAME $GOOGLE_CREDS_FILE_NAME Procfile
+          zip -r $SOURCE_BUNDLE_NAME $JAR_NAME $CONFIG_FILE_NAME $SECRET_CONFIG_DIR Procfile
+      - name: Print build directory contents
+        run: ls -l
       - name: Deploy to AWS EB
         uses: einaregilsson/beanstalk-deploy@v10
         with:
@@ -119,6 +131,6 @@ jobs:
           aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           application_name: mlb-tg-bot-fa
           environment_name: MlbTgBotFa-env
-          version_label: ${{ env.TAG_NAME }}
+          version_label: ${{ needs.build.outputs.versionName }}
           region: us-east-2
           deployment_package: ${{ env.DEPLOY_DIR_PATH }}/${{ env.SOURCE_BUNDLE_NAME }}
