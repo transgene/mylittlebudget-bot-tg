@@ -101,7 +101,7 @@ jobs:
         env:
           CONFIG: ${{ secrets.CONFIG_FILE }}
         run: |
-          echo $CONFIG > $CONFIG_FILE_NAME
+          echo -e $CONFIG > $CONFIG_FILE_NAME
       - name: Create directories for secrets
         run: |
           mkdir $SECRET_CONFIG_DIR &&
@@ -115,7 +115,7 @@ jobs:
         env:
           USER_CONFIG_GENE: ${{ secrets.USER_CONFIG_GENE }}
         run: |
-          echo $USER_CONFIG_GENE > $GENE_CONFIG_FILE_NAME
+          echo -e $USER_CONFIG_GENE > $GENE_CONFIG_FILE_NAME
       - name: Set SOURCE_BUNDLE_NAME var
         run: |
           echo ::set-env name=SOURCE_BUNDLE_NAME::$(echo "mylittlebudget-bot-tg.zip")
