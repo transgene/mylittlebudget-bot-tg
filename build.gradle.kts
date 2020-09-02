@@ -47,7 +47,7 @@ tasks {
 
     jar {
         manifest {
-            attributes["Main-Class"] = "net.transgene.mylittlebudget.tg.bot.MainKt"
+            attributes["Main-Class"] = "net.transgene.mylittlebudget.tg.bot.framework.MainKt"
         }
     }
     shadowJar {
