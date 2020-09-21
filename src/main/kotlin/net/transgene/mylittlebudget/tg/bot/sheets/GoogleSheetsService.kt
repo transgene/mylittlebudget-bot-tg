@@ -47,38 +47,9 @@ class GoogleSheetsService(googleCredentials: String, userInfo: UserConfig) : She
         allGroups = allExpenseGroups + incomeGroups
     }
 
-    override fun getExpenseGroups(): List<Cell> {
-        val expenseGroupCellDefinitions: List<String> = allExpenseGroups.keys.map {
-            singleCellRetrievalTemplate.format(sheetId, categoriesColumn, it)
-        }
-        val expenseCategoryCellRangeDefinitions: List<String> = allExpenseGroups.values.map { categoryRange ->
-            cellRangeRetrievalTemplate.format(
-                sheetId,
-                categoriesColumn,
-                categoryRange.first,
-                categoriesColumn,
-                categoryRange.last
-            )
-        }
+    override fun getExpenseGroups(): List<Cell> = loadGroupsData(allExpenseGroups)
 
-        val restResponse = sheetsRestService.spreadsheets().values()
-            .batchGet(spreadsheetId)
-            .setRanges(expenseGroupCellDefinitions + expenseCategoryCellRangeDefinitions)
-            .setMajorDimension("COLUMNS").execute()
-
-        val categoriesResponse = restResponse.valueRanges.drop(expenseGroupCellDefinitions.size)
-        val categoryAbbrevs: List<String> = categoriesResponse.map { categoryRange ->
-            val catList = categoryRange.getValues().first() as List<String>
-            catList.joinToString(prefix = "(", postfix = ")", limit = 3) { it.trimStart().take(5).trimEnd() }
-        }
-
-        val groupsResponse = restResponse.valueRanges.subList(0, expenseGroupCellDefinitions.size)
-        return groupsResponse.mapIndexed { i, valRange ->
-            val groupId = valRange.range.replaceBefore("!", "").drop(1).removePrefix(categoriesColumn).toLong()
-            val groupName = (valRange.getValues().first().first() as String).trim()
-            Cell(groupId, "$groupName ${categoryAbbrevs[i]}")
-        }
-    }
+    override fun getIncomeGroups(): List<Cell> = loadGroupsData(incomeGroups)
 
     override fun getCategoriesInGroup(groupCell: Cell): List<Cell> {
         val categoryIdsRange = allGroups[groupCell.id]
@@ -95,10 +66,6 @@ class GoogleSheetsService(googleCredentials: String, userInfo: UserConfig) : She
 
         val categoryNames = restResponse.getValues().first() as List<*>
         return categoryIdsRange.mapIndexed { i, id -> Cell(id, categoryNames[i] as String) }
-    }
-
-    override fun getIncomeGroups(): List<Cell> {
-        TODO("Not yet implemented")
     }
 
     override fun addToCategory(categoryCell: Cell, amount: Long): Boolean {
@@ -128,6 +95,39 @@ class GoogleSheetsService(googleCredentials: String, userInfo: UserConfig) : She
             .setValueInputOption("USER_ENTERED").execute()
 
         return cellWasEmpty
+    }
+
+    private fun loadGroupsData(groups: Map<Long, LongRange>): List<Cell> {
+        val expenseGroupCellDefinitions: List<String> = groups.keys.map {
+            singleCellRetrievalTemplate.format(sheetId, categoriesColumn, it)
+        }
+        val expenseCategoryCellRangeDefinitions: List<String> = groups.values.map { categoryRange ->
+            cellRangeRetrievalTemplate.format(
+                sheetId,
+                categoriesColumn,
+                categoryRange.first,
+                categoriesColumn,
+                categoryRange.last
+            )
+        }
+
+        val restResponse = sheetsRestService.spreadsheets().values()
+            .batchGet(spreadsheetId)
+            .setRanges(expenseGroupCellDefinitions + expenseCategoryCellRangeDefinitions)
+            .setMajorDimension("COLUMNS").execute()
+
+        val categoriesResponse = restResponse.valueRanges.drop(expenseGroupCellDefinitions.size)
+        val categoryAbbrevs: List<String> = categoriesResponse.map { categoryRange ->
+            val catList = categoryRange.getValues().first() as List<String>
+            catList.joinToString(prefix = "(", postfix = ")", limit = 3) { it.trimStart().take(5).trimEnd() }
+        }
+
+        val groupsResponse = restResponse.valueRanges.subList(0, expenseGroupCellDefinitions.size)
+        return groupsResponse.mapIndexed { i, valRange ->
+            val groupId = valRange.range.replaceBefore("!", "").drop(1).removePrefix(categoriesColumn).toLong()
+            val groupName = (valRange.getValues().first().first() as String).trim()
+            Cell(groupId, "$groupName ${categoryAbbrevs[i]}")
+        }
     }
 
     private fun validateCategory(categoryCell: Cell) {

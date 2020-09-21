@@ -7,8 +7,10 @@ import com.github.kotlintelegrambot.dispatcher.callbackQuery
 import com.github.kotlintelegrambot.dispatcher.command
 import com.github.kotlintelegrambot.dispatcher.message
 import com.github.kotlintelegrambot.entities.Message
+import com.github.kotlintelegrambot.entities.Update
 import com.github.kotlintelegrambot.extensions.filters.Filter
 import net.transgene.mylittlebudget.tg.bot.commands.ExpenseCommand
+import net.transgene.mylittlebudget.tg.bot.commands.IncomeCommand
 import net.transgene.mylittlebudget.tg.bot.sheets.GoogleSheetsService
 import org.ehcache.Cache
 import org.ehcache.config.builders.CacheConfigurationBuilder
@@ -26,16 +28,17 @@ fun main(args: Array<String>) {
 
         token = config.botToken
         dispatch {
-            command("exp") { bot, update ->
+            fun getSheetsService(chatId: Long): GoogleSheetsService =
+                GoogleSheetsService(config.googleCredentials, config.users.getValue(chatId))
+
+            fun callCommand(bot: Bot, update: Update, command: Command) {
                 val chatId = getChatId(update.message)
                 val messageId = getMessageId(update.message)
                 if (!registeredChats.contains(chatId) || messageId == null) {
-                    return@command
+                    return
                 }
 
                 tryExecute(bot, chatId) {
-                    val sheetsService = GoogleSheetsService(config.googleCredentials, config.users.getValue(chatId))
-                    val command = ExpenseCommand(sheetsService)
                     val conversation = Conversation(command, chatId, bot)
                     conversations.put(chatId, conversation)
 
@@ -45,6 +48,14 @@ fun main(args: Array<String>) {
                         conversations.remove(chatId)
                     }
                 }
+            }
+
+            command("exp") { bot, update ->
+                callCommand(bot, update, ExpenseCommand(getSheetsService(getChatId(update.message))))
+            }
+
+            command("inc") { bot, update ->
+                callCommand(bot, update, IncomeCommand(getSheetsService(getChatId(update.message))))
             }
 
             callbackQuery { bot, update ->
@@ -99,6 +110,7 @@ fun main(args: Array<String>) {
             }
         }
     }
+
     bot.startPolling()
 }
 
