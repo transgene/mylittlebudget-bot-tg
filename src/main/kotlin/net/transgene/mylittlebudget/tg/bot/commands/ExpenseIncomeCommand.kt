@@ -1,6 +1,7 @@
 package net.transgene.mylittlebudget.tg.bot.commands
 
-import net.transgene.mylittlebudget.tg.bot.commands.ButtonAction.*
+import net.transgene.mylittlebudget.tg.bot.commands.ButtonAction.GET_CATEGORIES_IN_GROUP
+import net.transgene.mylittlebudget.tg.bot.commands.ButtonAction.WAIT_FOR_AMOUNT_INPUT
 import net.transgene.mylittlebudget.tg.bot.framework.*
 import net.transgene.mylittlebudget.tg.bot.sheets.Cell
 import net.transgene.mylittlebudget.tg.bot.sheets.SheetsService
@@ -22,16 +23,15 @@ abstract class ExpenseIncomeCommand(private val sheetsService: SheetsService) : 
     }
 
     override fun consumeButtonPress(messageId: Long, payload: ButtonPayload): List<Action> {
-        if (payload.action != CANCEL_OPERATION && payload.chosenCell == null) {
+        if (payload.chosenCell == null) {
             throw IllegalStateException("Cell must be selected for $WAIT_FOR_AMOUNT_INPUT action")
         }
         return when (payload.action) {
-            GET_CATEGORIES_IN_GROUP -> getCategoriesInGroupAction(payload.chosenCell!!, messageId)
+            GET_CATEGORIES_IN_GROUP -> getCategoriesInGroupAction(payload.chosenCell, messageId)
             WAIT_FOR_AMOUNT_INPUT -> {
                 chosenCategoryCell = payload.chosenCell
                 waitForAmountInputAction(messageId)
             }
-            CANCEL_OPERATION -> cancelOperationAction(messageId)
         }
     }
 
@@ -50,7 +50,7 @@ abstract class ExpenseIncomeCommand(private val sheetsService: SheetsService) : 
         } else {
             getOperationMessage(amount)
         }
-        return listOf(SendMessage(resultMessage), Finish)
+        return listOf(SendMessage(text = resultMessage, cancellable = false), Finish)
     }
 
     protected abstract fun getGroups(): List<Cell>
@@ -83,17 +83,7 @@ abstract class ExpenseIncomeCommand(private val sheetsService: SheetsService) : 
     }
 
     private fun waitForAmountInputAction(messageId: Long): List<Action> {
-        return listOf(
-            EditMessage(
-                messageId,
-                "Пожалуйста, введите сумму.\nИли нажмите кнопку, и я завершу операцию.",
-                listOf(Button("Отменить", ButtonPayload(CANCEL_OPERATION)))
-            )
-        )
-    }
-
-    private fun cancelOperationAction(messageId: Long): List<Action> {
-        return listOf(DeleteMessage(messageId), Finish)
+        return listOf(EditMessage(messageId, "Пожалуйста, введите сумму:"))
     }
 }
 
@@ -101,6 +91,5 @@ data class ButtonPayload(val action: ButtonAction, val chosenCell: Cell? = null)
 
 enum class ButtonAction {
     GET_CATEGORIES_IN_GROUP,
-    WAIT_FOR_AMOUNT_INPUT,
-    CANCEL_OPERATION
+    WAIT_FOR_AMOUNT_INPUT
 }

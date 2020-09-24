@@ -12,6 +12,7 @@ import com.github.kotlintelegrambot.extensions.filters.Filter
 import net.transgene.mylittlebudget.tg.bot.commands.ExpenseCommand
 import net.transgene.mylittlebudget.tg.bot.commands.IncomeCommand
 import net.transgene.mylittlebudget.tg.bot.sheets.GoogleSheetsService
+import okhttp3.logging.HttpLoggingInterceptor
 import org.ehcache.Cache
 import org.ehcache.config.builders.CacheConfigurationBuilder
 import org.ehcache.config.builders.CacheManagerBuilder
@@ -39,14 +40,11 @@ fun main(args: Array<String>) {
                 }
 
                 tryExecute(bot, chatId) {
-                    val conversation = Conversation(command, chatId, bot)
+                    val conversation = Conversation(command, bot, chatId, messageId)
                     conversations.put(chatId, conversation)
 
                     val actions = command.call(messageId)
                     actions.forEach { it.perform(conversation) }
-                    if (actions.contains(Finish)) {
-                        conversations.remove(chatId)
-                    }
                 }
             }
 
@@ -65,12 +63,15 @@ fun main(args: Array<String>) {
                     return@callbackQuery
                 }
 
-                val conversation = conversations[chatId] ?: return@callbackQuery
+                val conversation = getConversation(conversations, chatId) ?: return@callbackQuery
                 val callbackData = update.callbackQuery?.data ?: return@callbackQuery
                 val callbackPayload = parseCallbackData(callbackData)
                 val buttonPayload = conversation.getButtonPayloadById(callbackPayload.buttonId)
                 if (conversation.id != callbackPayload.conversationId || buttonPayload == null) {
                     bot.sendMessage(chatId, "Эта кнопка принадлежит завершенной или отмененной операции.")
+                    return@callbackQuery
+                } else if (buttonPayload is Action) {
+                    buttonPayload.perform(conversation)
                     return@callbackQuery
                 } else if (conversation.command !is ButtonPressCommand<*>) {
                     bot.sendMessage(chatId, "Команда, которую вы вызвали, не принимает нажатия кнопок.")
@@ -78,12 +79,8 @@ fun main(args: Array<String>) {
                 }
 
                 tryExecute(bot, chatId) {
-                    val actions =
-                        (conversation.command as ButtonPressCommand<Any>).consumeButtonPress(messageId, buttonPayload)
+                    val actions = (conversation.command as ButtonPressCommand<Any>).consumeButtonPress(messageId, buttonPayload)
                     actions.forEach { it.perform(conversation) }
-                    if (actions.contains(Finish)) {
-                        conversations.remove(chatId)
-                    }
                 }
             }
 
@@ -93,7 +90,7 @@ fun main(args: Array<String>) {
                 if (!registeredChats.contains(chatId) || messageId == null) {
                     return@message
                 }
-                val conversation = conversations[chatId] ?: return@message
+                val conversation = getConversation(conversations, chatId) ?: return@message
                 val msgText = update.message?.text ?: return@message
                 if (conversation.command !is TextCommand) {
                     bot.sendMessage(chatId, "Команда, которую вы вызвали, не принимает текстовые сообщения.")
@@ -101,11 +98,9 @@ fun main(args: Array<String>) {
                 }
 
                 tryExecute(bot, chatId) {
-                    val actions = conversation.command.consumeText(messageId, msgText)
+                    conversation.logMessage(messageId)
+                    val actions = (conversation.command as TextCommand).consumeText(messageId, msgText)
                     actions.forEach { it.perform(conversation) }
-                    if (actions.contains(Finish)) {
-                        conversations.remove(chatId)
-                    }
                 }
             }
         }
@@ -145,6 +140,19 @@ private fun getConversationStorage(): Cache<Long, Conversation> {
             Conversation::class.java,
             ResourcePoolsBuilder.heap(Long.MAX_VALUE)
         )
-        .withExpiry(ExpiryPolicyBuilder.timeToLiveExpiration(Duration.ofMinutes(30)))
+        .withExpiry(ExpiryPolicyBuilder.timeToLiveExpiration(Duration.ofMinutes(10)))
     )
 }
+
+private fun getConversation(conversations: Cache<Long, Conversation>, chatId: Long): Conversation? {
+    val conversation = conversations[chatId]
+    if (conversation != null) {
+        if (conversation.isFinished()) {
+            conversations.remove(chatId)
+        } else {
+            return conversation
+        }
+    }
+    return null
+}
+
