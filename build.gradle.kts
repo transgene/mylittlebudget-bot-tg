@@ -11,7 +11,7 @@ version = scmVersion.version
 
 plugins {
     java
-    kotlin("jvm") version "1.3.72"
+    kotlin("jvm") version "1.6.10"
 
     id("com.github.johnrengelman.shadow") version "5.2.0"
     id("pl.allegro.tech.build.axion-release") version "1.12.0"
@@ -33,16 +33,16 @@ dependencies {
     implementation("org.tomlj:tomlj:1.0.0")
 }
 
-configure<JavaPluginConvention> {
-    sourceCompatibility = JavaVersion.VERSION_14
+configure<JavaPluginExtension> {
+    sourceCompatibility = JavaVersion.VERSION_17
 }
 
 tasks {
     compileKotlin {
-        kotlinOptions.jvmTarget = "11"
+        kotlinOptions.jvmTarget = "17"
     }
     compileTestKotlin {
-        kotlinOptions.jvmTarget = "11"
+        kotlinOptions.jvmTarget = "17"
     }
 
     jar {
