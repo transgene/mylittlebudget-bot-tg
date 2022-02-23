@@ -118,6 +118,7 @@ class GoogleSheetsService(googleCredentials: String, userInfo: UserConfig) : She
 
         val categoriesResponse = restResponse.valueRanges.drop(expenseGroupCellDefinitions.size)
         val categoryAbbrevs: List<String> = categoriesResponse.map { categoryRange ->
+            @Suppress("UNCHECKED_CAST")
             val catList = categoryRange.getValues().first() as List<String>
             catList.joinToString(prefix = "(", postfix = ")", limit = 3) { it.trimStart().take(5).trimEnd() }
         }

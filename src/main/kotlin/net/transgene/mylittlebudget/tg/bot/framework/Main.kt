@@ -12,7 +12,6 @@ import com.github.kotlintelegrambot.extensions.filters.Filter
 import net.transgene.mylittlebudget.tg.bot.commands.ExpenseCommand
 import net.transgene.mylittlebudget.tg.bot.commands.IncomeCommand
 import net.transgene.mylittlebudget.tg.bot.sheets.GoogleSheetsService
-import okhttp3.logging.HttpLoggingInterceptor
 import org.ehcache.Cache
 import org.ehcache.config.builders.CacheConfigurationBuilder
 import org.ehcache.config.builders.CacheManagerBuilder
@@ -79,6 +78,7 @@ fun main(args: Array<String>) {
                 }
 
                 tryExecute(bot, chatId) {
+                    @Suppress("UNCHECKED_CAST")
                     val actions = (conversation.command as ButtonPressCommand<Any>).consumeButtonPress(messageId, buttonPayload)
                     actions.forEach { it.perform(conversation) }
                 }
