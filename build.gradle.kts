@@ -36,17 +36,6 @@ configure<JavaPluginExtension> {
     sourceCompatibility = JavaVersion.VERSION_17
 }
 
-tasks.register("latestVersion") {
-    group = "release"
-    description = "Gets version name of the latest release"
-
-    println("chirik")
-
-//    val versionConfig = GradleAwareContext.config(project)
-//    val repo = GradleAwareContext.create(project, versionConfig).repository()
-//    println(repo.latestTags(Pattern.compile("v\\d+\\.\\d+\\.\\d+")).tags[0])
-}
-
 tasks {
     compileKotlin {
         kotlinOptions.jvmTarget = "17"
@@ -105,5 +94,21 @@ tasks {
                 }
             })
         )
+    }
+
+    register("latestVersion") {
+        group = "release"
+        description = "Gets version name of the latest release"
+
+        println("chirik")
+
+        val versionConfig = GradleAwareContext.config(project)
+        val repo = GradleAwareContext.create(project, versionConfig).repository()
+        println(repo)
+        println(repo.latestTags(Pattern.compile("v\\d+\\.\\d+\\.\\d+")))
+
+//    val versionConfig = GradleAwareContext.config(project)
+//    val repo = GradleAwareContext.create(project, versionConfig).repository()
+//    println(repo.latestTags(Pattern.compile("v\\d+\\.\\d+\\.\\d+")).tags[0])
     }
 }
