@@ -43,8 +43,8 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Echo tasks
-        run: ./gradlew tasks
+      - name: Echo last released version
+        run: ./gradlew latestVersion
 
       - name: Build fat JAR
         uses: gradle/gradle-build-action@v2.1.3
