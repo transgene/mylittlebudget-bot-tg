@@ -105,7 +105,7 @@ tasks {
         val versionConfig = GradleAwareContext.config(project)
         val repo = GradleAwareContext.create(project, versionConfig).repository()
         println(repo)
-        println(repo.latestTags(Pattern.compile("v\\d+\\.\\d+\\.\\d+")))
+        println(repo.latestTags(Pattern.compile("v\\d+\\.\\d+\\.\\d+")).tags)
 
 //    val versionConfig = GradleAwareContext.config(project)
 //    val repo = GradleAwareContext.create(project, versionConfig).repository()
