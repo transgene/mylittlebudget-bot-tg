@@ -14,7 +14,7 @@ plugins {
     kotlin("jvm") version "1.6.10"
 
     id("com.github.johnrengelman.shadow") version "5.2.0"
-    id("pl.allegro.tech.build.axion-release") version "1.12.0"
+    id("pl.allegro.tech.build.axion-release") version "1.13.6"
 }
 
 repositories {
