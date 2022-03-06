@@ -47,7 +47,7 @@ jobs:
         with:
           arguments: shadowJar
       - name: Save last released version to env
-        run: echo "last_version=$(./gradlew latestVersion --debug)" >> $GITHUB_ENV
+        run: echo "last_version=$(./gradlew latestVersion --debug --stacktrace)" >> $GITHUB_ENV
       - name: Echo last released version
         run: echo ${{ env.last_version }}
       - name: Make new release if needed
