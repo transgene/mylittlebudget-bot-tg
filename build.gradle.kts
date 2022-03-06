@@ -100,15 +100,8 @@ tasks {
         group = "release"
         description = "Gets version name of the latest release"
 
-        println("chirik")
-
         val versionConfig = GradleAwareContext.config(project)
         val repo = GradleAwareContext.create(project, versionConfig).repository()
-        println(repo)
-        println(repo.latestTags(Pattern.compile("v\\d+\\.\\d+\\.\\d+")).tags)
-
-//    val versionConfig = GradleAwareContext.config(project)
-//    val repo = GradleAwareContext.create(project, versionConfig).repository()
-//    println(repo.latestTags(Pattern.compile("v\\d+\\.\\d+\\.\\d+")).tags[0])
+        println(repo.latestTags(Pattern.compile("v\\d+\\.\\d+\\.\\d+")).tags[0])
     }
 }
