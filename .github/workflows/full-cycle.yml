@@ -47,24 +47,24 @@ jobs:
         with:
           arguments: shadowJar
       - name: Save last released version to env
-        run: echo ::set-env name=LAST_VERSION::$(./gradlew latestVersion --quiet)
+        run: echo "last_version=$(./gradlew latestVersion --quiet)" >> $GITHUB_ENV
       - name: Echo last released version
-        run: echo ${{ env.LAST_VERSION }}
+        run: echo ${{ env.last_version }}
       - name: Make new release if needed
         run: |
           ./gradlew release -Prelease.disableRemoteCheck -Prelease.disableUncommittedCheck -Prelease.customUsername=${{ github.repository_owner }} -Prelease.customPassword=${{ secrets.GH_PAT_AXION }}
       - name: Save latest version to env
-        run: echo ::set-env name=LATEST_VERSION::$(./gradlew latestVersion --quiet)
+        run: echo "latest_version=$(./gradlew latestVersion --quiet)" >> $GITHUB_ENV
       - name: Echo latest version
-        run: echo ${{ env.LATEST_VERSION }}
+        run: echo ${{ env.latest_version }}
       - name: Find out whether a release was made
         id: releaseMade
         run: |
-          echo ::set-output name=general::${{ env.LAST_VERSION != env.LATEST_VERSION || github.event.inputs.forceDeploy == 'true' }}
+          echo ::set-output name=general::${{ env.last_version != env.latest_version || github.event.inputs.forceDeploy == 'true' }}
       - name: Get version name
         id: getVersionName
         run: |
-          echo ::set-output name=general::${{ env.LATEST_VERSION }}-$GITHUB_SHA
+          echo ::set-output name=general::${{ env.latest_version }}-$GITHUB_SHA
       - name: Echo version name
         run: echo ${{ steps.getVersionName.outputs.general }}
       - name: Upload JAR
@@ -74,56 +74,56 @@ jobs:
           name: ${{ env.BUILD_ARTIFACT_NAME }}
           path: build/libs/${{ env.JAR_NAME }}
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    if: ${{ needs.build.outputs.releaseMade == 'true' }}
-    defaults:
-      run:
-        working-directory: ${{ env.DEPLOY_DIR_PATH }}
-    steps:
-      - name: Download JAR
-        uses: actions/download-artifact@v2
-        with:
-          name: ${{ env.BUILD_ARTIFACT_NAME }}
-          path: ${{ env.DEPLOY_DIR_PATH }}
-      - name: Create Procfile
-        run: |
-          echo "web: java -jar $JAR_NAME" > Procfile
-      - name: Generate configuration file
-        env:
-          CONFIG: ${{ secrets.CONFIG_FILE }}
-        run: |
-          echo -e $CONFIG > $CONFIG_FILE_NAME
-      - name: Create directories for secrets
-        run: |
-          mkdir $SECRET_CONFIG_DIR &&
-          mkdir $USERS_CONFIG_DIR
-      - name: Generate Google API credentials file
-        env:
-          GOOGLE_API_CREDS: ${{ secrets.GOOGLE_API_CREDS }}
-        run: |
-          echo $GOOGLE_API_CREDS > $GOOGLE_CREDS_FILE_NAME
-      - name: Generate config file for user Gene
-        env:
-          USER_CONFIG_GENE: ${{ secrets.USER_CONFIG_GENE }}
-        run: |
-          echo -e $USER_CONFIG_GENE > $GENE_CONFIG_FILE_NAME
-      - name: Set SOURCE_BUNDLE_NAME var
-        run: |
-          echo ::set-env name=SOURCE_BUNDLE_NAME::$(echo "mylittlebudget-bot-tg.zip")
-      - name: Zip source bundle
-        run: |
-          zip -r $SOURCE_BUNDLE_NAME $JAR_NAME $CONFIG_FILE_NAME $SECRET_CONFIG_DIR Procfile
-      - name: Print build directory contents
-        run: ls -l
-      - name: Deploy to AWS EB
-        uses: einaregilsson/beanstalk-deploy@v10
-        with:
-          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          application_name: mlb-tg-bot-fa
-          environment_name: MlbTgBotFa-env
-          version_label: ${{ needs.build.outputs.versionName }}
-          region: us-east-2
-          deployment_package: ${{ env.DEPLOY_DIR_PATH }}/${{ env.SOURCE_BUNDLE_NAME }}
+#  deploy:
+#    needs: build
+#    runs-on: ubuntu-latest
+#    if: ${{ needs.build.outputs.releaseMade == 'true' }}
+#    defaults:
+#      run:
+#        working-directory: ${{ env.DEPLOY_DIR_PATH }}
+#    steps:
+#      - name: Download JAR
+#        uses: actions/download-artifact@v2
+#        with:
+#          name: ${{ env.BUILD_ARTIFACT_NAME }}
+#          path: ${{ env.DEPLOY_DIR_PATH }}
+#      - name: Create Procfile
+#        run: |
+#          echo "web: java -jar $JAR_NAME" > Procfile
+#      - name: Generate configuration file
+#        env:
+#          CONFIG: ${{ secrets.CONFIG_FILE }}
+#        run: |
+#          echo -e $CONFIG > $CONFIG_FILE_NAME
+#      - name: Create directories for secrets
+#        run: |
+#          mkdir $SECRET_CONFIG_DIR &&
+#          mkdir $USERS_CONFIG_DIR
+#      - name: Generate Google API credentials file
+#        env:
+#          GOOGLE_API_CREDS: ${{ secrets.GOOGLE_API_CREDS }}
+#        run: |
+#          echo $GOOGLE_API_CREDS > $GOOGLE_CREDS_FILE_NAME
+#      - name: Generate config file for user Gene
+#        env:
+#          USER_CONFIG_GENE: ${{ secrets.USER_CONFIG_GENE }}
+#        run: |
+#          echo -e $USER_CONFIG_GENE > $GENE_CONFIG_FILE_NAME
+#      - name: Set SOURCE_BUNDLE_NAME var
+#        run: |
+#          echo ::set-env name=SOURCE_BUNDLE_NAME::$(echo "mylittlebudget-bot-tg.zip")
+#      - name: Zip source bundle
+#        run: |
+#          zip -r $SOURCE_BUNDLE_NAME $JAR_NAME $CONFIG_FILE_NAME $SECRET_CONFIG_DIR Procfile
+#      - name: Print build directory contents
+#        run: ls -l
+#      - name: Deploy to AWS EB
+#        uses: einaregilsson/beanstalk-deploy@v10
+#        with:
+#          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#          application_name: mlb-tg-bot-fa
+#          environment_name: MlbTgBotFa-env
+#          version_label: ${{ needs.build.outputs.versionName }}
+#          region: us-east-2
+#          deployment_package: ${{ env.DEPLOY_DIR_PATH }}/${{ env.SOURCE_BUNDLE_NAME }}
