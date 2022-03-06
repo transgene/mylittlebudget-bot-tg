@@ -10,7 +10,6 @@ group = "net.transgene.mylittlebudget"
 version = scmVersion.version
 
 plugins {
-    java
     kotlin("jvm") version "1.6.10"
 
     id("com.github.johnrengelman.shadow") version "5.2.0"
