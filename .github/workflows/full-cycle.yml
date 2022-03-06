@@ -42,6 +42,10 @@ jobs:
           distribution: 'temurin'
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
+
+      - name: Echo tasks
+        run: ./gradlew tasks
+
       - name: Build fat JAR
         uses: gradle/gradle-build-action@v2.1.3
         with:
